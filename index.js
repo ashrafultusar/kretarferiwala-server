@@ -1,0 +1,487 @@
+const express = require("express");
+const cors = require("cors");
+const mongodb = require("mongodb");
+const multer = require("multer");
+const { v2: cloudinary } = require("cloudinary");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+
+require("dotenv").config();
+const app = express();
+const port = process.env.PORT || 5000;
+
+
+app.use(cors());
+
+
+app.use(express.json());
+
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const uri = process.env.MONGODB_URI;
+
+
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+});
+
+// Cloudinary config
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Multer config with Cloudinary
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "kretarferiwala/slider",
+    allowed_formats: ["jpg", "jpeg", "png"],
+  },
+});
+const upload = multer({ storage });
+
+async function run() {
+  try {
+    const allProducts = client.db("kretarferiwala").collection("products");
+    const allCategories = client.db("kretarferiwala").collection("categories");
+    const slider = client.db("kretarferiwala").collection("sliderimages");
+    const allOrders = client.db("kretarferiwala").collection("orders");
+    const deliveryCharge = client
+      .db("kretarferiwala")
+      .collection("deliverycharges");
+
+    const sliderImages = client.db("kretarferiwala").collection("sliderimages");
+
+    // Upload a new slider image
+    app.post("/slider", upload.single("image"), async (req, res) => {
+      try {
+        const imageUrl = req.file.path;
+        const result = await sliderImages.insertOne({
+          imageUrl,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        const insertedImage = await sliderImages.findOne({
+          _id: result.insertedId,
+        });
+        res.status(201).json(insertedImage);
+      } catch (error) {
+        console.error("Slider image upload error:", error);
+        res.status(500).json({ error: "Failed to upload slider image" });
+      }
+    });
+
+    // Delete a slider image
+    app.delete("/sliderDelete", async (req, res) => {
+      const { id } = req.query;
+      if (!id) return res.status(400).json({ error: "Missing image ID" });
+
+      try {
+        const sliderImage = await sliderImages.findOne({
+          _id: new ObjectId(id),
+        });
+
+        if (!sliderImage) {
+          return res.status(404).json({ error: "Image not found" });
+        }
+
+        // Delete image from Cloudinary
+        const public_id = sliderImage.imageUrl.split("/").pop().split(".")[0];
+        await cloudinary.uploader.destroy(public_id);
+
+        // Delete image from MongoDB
+        await sliderImages.deleteOne({ _id: new ObjectId(id) });
+
+        res.status(200).json({ message: "Image deleted successfully" });
+      } catch (err) {
+        console.error("Error deleting image:", err);
+        res.status(500).json({ error: "Failed to delete image" });
+      }
+    });
+
+    //  all products fetch
+    app.get("/products", async (req, res) => {
+      try {
+        // Connect to the database
+        await client.connect();
+
+        // Fetch all posts from the 'allProducts' collection
+        const allPosts = await allProducts.find().toArray();
+
+        // Send the posts as a JSON response
+        res.json(allPosts);
+      } catch (error) {
+        console.error("Error fetching all posts:", error);
+        res.status(500).json({ error: "Failed to fetch posts" });
+      }
+    });
+
+    // id wise products fetch
+    app.get("/productDetails/:id", async (req, res) => {
+      const id = req.params.id;
+      console.log(id);
+      const query = { _id: new ObjectId(id) };
+      const result = await allProducts.findOne(query);
+      res.send(result);
+    });
+
+    //  all categories fetch
+    app.get("/categories", async (req, res) => {
+      try {
+        // Connect to the database
+        await client.connect();
+
+        // Fetch all posts from the 'allProducts' collection
+        const allPosts = await allCategories.find().toArray();
+
+        // Send the posts as a JSON response
+        res.json(allPosts);
+      } catch (error) {
+        console.error("Error fetching all posts:", error);
+        res.status(500).json({ error: "Failed to fetch posts" });
+      }
+    });
+
+    //   slider get
+    app.get("/sliders", async (req, res) => {
+      try {
+        // Connect to the database
+        await client.connect();
+
+        // Fetch all posts from the 'allProducts' collection
+        const allPosts = await slider.find().toArray();
+
+        // Send the posts as a JSON response
+        res.json(allPosts);
+      } catch (error) {
+        console.error("Error fetching all posts:", error);
+        res.status(500).json({ error: "Failed to fetch posts" });
+      }
+    });
+
+    // Order create route
+
+    app.post("/orders", async (req, res) => {
+      try {
+        const orderData = req.body;
+
+        if (!orderData?.products || orderData.products.length === 0) {
+          return res.status(400).json({ error: "No products in order" });
+        }
+
+        // Generate dynamic order number (GB# followed by random 6 digits)
+        const generateOrderNumber = () => {
+          const randomNum = Math.floor(100000 + Math.random() * 900000);
+          return `GB#${randomNum}`;
+        };
+
+        // Create order with default values
+        const orderWithDefaults = {
+          ...orderData,
+          status: "active",
+          paymentMethod: "Cash on Delivery",
+          orderNumber: generateOrderNumber(),
+          createdAt: new Date(), // Adding timestamp
+        };
+
+        const result = await allOrders.insertOne(orderWithDefaults);
+
+        res.status(201).json({
+          message: "Order placed successfully",
+          insertedId: result.insertedId,
+          orderNumber: orderWithDefaults.orderNumber, // Send back the generated order number
+        });
+      } catch (error) {
+        console.error("Error placing order:", error);
+        res.status(500).json({ error: "Failed to place order" });
+      }
+    });
+
+    // related products fetch
+    app.get("/products", async (req, res) => {
+      try {
+        const category = req.query.category;
+        const excludeId = req.query.excludeId;
+
+        let query = {};
+        if (category) {
+          query.category = category;
+        }
+
+        const allProducts = await allProducts
+          .find({
+            ...query,
+            _id: { $ne: excludeId },
+          })
+          .toArray();
+
+        res.json(allProducts);
+      } catch (error) {
+        console.error("Error fetching products:", error);
+        res.status(500).json({ error: "Failed to fetch products" });
+      }
+    });
+
+    // get all order
+    app.get("/allOrders", async (req, res) => {
+      try {
+        // Connect to the database
+        await client.connect();
+
+        // Fetch all posts from the 'allProducts' collection
+        const allPosts = await allOrders.find().toArray();
+
+        // Send the posts as a JSON response
+        res.json(allPosts);
+      } catch (error) {
+        console.error("Error fetching all posts:", error);
+        res.status(500).json({ error: "Failed to fetch posts" });
+      }
+    });
+
+    // Update order status
+    app.patch("/orders/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        if (!status) {
+          return res.status(400).json({ error: "Status is required" });
+        }
+
+        const result = await allOrders.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status } }
+        );
+
+        if (result.modifiedCount === 0) {
+          return res
+            .status(404)
+            .json({ error: "Order not found or already updated" });
+        }
+
+        res.status(200).json({
+          message: "Order status updated successfully",
+          data: { status },
+        });
+      } catch (error) {
+        console.error("Failed to update order status:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    });
+
+    app.get("/orders/:id", async (req, res) => {
+      const id = req.params.id;
+      console.log(id);
+      const query = { _id: new ObjectId(id) };
+      const result = await allOrders.findOne(query);
+      res.send(result);
+    });
+
+    // admin route products delete
+    // DELETE product by ID
+    app.delete("/product/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const query = { _id: new ObjectId(id) };
+        const result = await allProducts.deleteOne(query);
+
+        if (result.deletedCount === 0) {
+          return res.status(404).json({ message: "Product not found" });
+        }
+
+        res.json({ message: "Product deleted successfully" });
+      } catch (error) {
+        console.error("Error deleting product:", error);
+        res.status(500).json({ message: "Failed to delete product" });
+      }
+    });
+
+    // delivery charge
+    app.post("/deliverycharges", async (req, res) => {
+      try {
+        const { insideDhaka, outsideDhaka } = req.body;
+
+        // Validation
+        if (
+          typeof insideDhaka !== "number" ||
+          typeof outsideDhaka !== "number"
+        ) {
+          return res.status(400).json({ message: "Invalid delivery charges" });
+        }
+
+        const existing = await deliveryCharge.findOne({});
+
+        let result;
+        if (existing) {
+          // Update existing document
+          result = await deliveryCharge.updateOne(
+            { _id: existing._id },
+            { $set: { insideDhaka, outsideDhaka } }
+          );
+          if (result.modifiedCount === 0) {
+            return res
+              .status(400)
+              .json({ message: "No changes made to delivery charges" });
+          }
+        } else {
+          // Insert new document
+          result = await deliveryCharge.insertOne({
+            insideDhaka,
+            outsideDhaka,
+          });
+        }
+
+        res
+          .status(200)
+          .json({ message: "Delivery charges updated successfully" });
+      } catch (error) {
+        console.error("Error updating delivery charges:", error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
+
+    // Create a new category
+    app.post("/category", upload.single("image"), async (req, res) => {
+      const { name } = req.body;
+      const image = req.file?.path;
+
+      try {
+        if (!name || !image) {
+          return res
+            .status(400)
+            .json({ error: "Category name and image are required" });
+        }
+
+        const result = await allCategories.insertOne({
+          name,
+          image,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        const newCategory = await allCategories.findOne({
+          _id: result.insertedId,
+        });
+        res.status(201).json(newCategory);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Failed to create category" });
+      }
+    });
+
+    // Delete a category by ID
+    app.delete("/category/:id", async (req, res) => {
+      const { id } = req.params; // Change to req.params.id
+
+      try {
+        const category = await allCategories.findOne({ _id: new ObjectId(id) });
+
+        if (!category) {
+          return res.status(404).json({ error: "Category not found" });
+        }
+
+        // Cloudinary delete image (assuming public_id is properly set)
+        const public_id = category.image.split("/").pop().split(".")[0];
+        await cloudinary.uploader.destroy(public_id);
+
+        await allCategories.deleteOne({ _id: new ObjectId(id) });
+
+        res.status(200).json({ message: "Category deleted successfully" });
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Failed to delete category" });
+      }
+    });
+
+    // Create new product with image upload
+    app.post("/products", upload.array("images", 5), async (req, res) => {
+      try {
+        if (!req.files || req.files.length === 0) {
+          return res.status(400).json({ message: "No images uploaded" });
+        }
+
+        const { name, category, description, regularPrice, discountPrice } =
+          req.body;
+
+        const imageUrls = req.files.map((file) => file.path); // Cloudinary URLs
+
+        const newProduct = {
+          name,
+          category,
+          description,
+          regularPrice,
+          discountPrice,
+          images: imageUrls,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        const result = await allProducts.insertOne(newProduct);
+
+        res.status(201).json({
+          message: "Product added successfully",
+          product: newProduct,
+          insertedId: result.insertedId,
+        });
+      } catch (error) {
+        console.error("Error adding product:", error);
+        res
+          .status(500)
+          .json({ message: "Failed to add product", error: error.message });
+      }
+    });
+
+     // Search route
+     app.get("/products", async (req, res) => {
+      try {
+        const query = req.query.query || "";
+        if (!query.trim()) {
+          return res.json([]); 
+        }
+    
+        const regex = new RegExp(query, "i");
+        const products = await allProducts
+          .find({ name: { $regex: regex } })
+          .toArray();
+    
+        res.json(products);
+      } catch (error) {
+        console.error("Fetch error:", error);
+        res.status(500).json({ error: "Failed to fetch products" });
+      }
+    });
+    
+
+    
+
+
+
+
+    // Connect the client to the server	(optional starting in v4.7)
+
+    // await client.connect();
+    // Send a ping to confirm a successful connection
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
+  } finally {
+    // Ensures that the client will close when you finish/error
+    // await client.close();
+  }
+}
+run().catch(console.dir);
+
+app.get("/", (req, res) => {
+  res.send("kretarferiwala is running");
+});
+
+app.listen(port, () => {
+  console.log(`kretarferiwala is running on port ${port}`);
+});
+
