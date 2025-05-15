@@ -56,6 +56,7 @@ const storage = new CloudinaryStorage({
   params: {
     folder: "kretarferiwala/slider",
     allowed_formats: ["jpg", "jpeg", "png"],
+    
   },
 });
 const upload = multer({ storage });
@@ -96,7 +97,7 @@ async function run() {
 
 
 // admin register
-app.post("/register",token, async (req, res) => {
+app.post("/register", async (req, res) => {
   const { email, password } = req.body;
 
   const existingUser = await usersCollection.findOne({ email });
@@ -113,7 +114,6 @@ app.post("/register",token, async (req, res) => {
 
   res.status(201).json({ message: "User registered successfully" });
 });
-
 
 
 // admin login
@@ -136,7 +136,7 @@ app.post("/login", async (req, res) => {
   }
 
   const token = jwt.sign({ email: user.email }, process.env.JWT_SECRET, {
-    expiresIn: "1h",
+    expiresIn: "7d",
   });
 
   res.json({ token });
@@ -150,23 +150,8 @@ app.get("/me", token, (req, res) => {
 
 
 
-
-
-// Protected route example
-//  app.get('/profile', authenticateToken, async (req, res) => {
-//   try {
-//     const user = await usersCollection.findOne({ email: req.user.email });
-//     if (!user) return res.status(404).json({ message: 'User not found' });
-
-//     res.json({ email: user.email });
-//   } catch (error) {
-//     res.status(500).json({ message: 'Server error' });
-//   }
-// });
-
-
     // Upload a new slider image
-    app.post("/slider",token, upload.single("image"), async (req, res) => {
+    app.post("/slider", upload.single("image"), async (req, res) => {
       try {
         const imageUrl = req.file.path;
         const result = await sliderImages.insertOne({
@@ -185,7 +170,7 @@ app.get("/me", token, (req, res) => {
     });
 
     // Delete a slider image
-    app.delete("/sliderDelete",token, async (req, res) => {
+    app.delete("/sliderDelete", async (req, res) => {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: "Missing image ID" });
 
@@ -324,7 +309,7 @@ app.get("/me", token, (req, res) => {
     
 
     // get all order
-    app.get("/allOrders",token, async (req, res) => {
+    app.get("/allOrders", async (req, res) => {
       try {
         await client.connect();
 
@@ -338,7 +323,7 @@ app.get("/me", token, (req, res) => {
     });
 
     // Update order status
-    app.patch("/orders/:id",token, async (req, res) => {
+    app.patch("/orders/:id", async (req, res) => {
       try {
         const { id } = req.params;
         const { status } = req.body;
@@ -368,7 +353,7 @@ app.get("/me", token, (req, res) => {
       }
     });
 
-    app.get("/orders/:id",token, async (req, res) => {
+    app.get("/orders/:id", async (req, res) => {
       const id = req.params.id;
       console.log(id);
       const query = { _id: new ObjectId(id) };
@@ -395,7 +380,7 @@ app.get("/me", token, (req, res) => {
     });
 
     // delivery charge
-    app.get("/updatedeliverycharge",token, async (req, res) => {
+    app.get("/updatedeliverycharge", async (req, res) => {
       try {
         const chargeData = await deliveryCharge.findOne({});
     
@@ -414,7 +399,7 @@ app.get("/me", token, (req, res) => {
     });
 
     // Create a new category
-    app.post("/category",token, upload.single("image"), async (req, res) => {
+    app.post("/category", upload.single("image"), async (req, res) => {
       const { name } = req.body;
       const image = req.file?.path;
 
@@ -443,7 +428,7 @@ app.get("/me", token, (req, res) => {
     });
 
     // Delete a category by ID
-    app.delete("/category/:id",token, async (req, res) => {
+    app.delete("/category/:id", async (req, res) => {
       const { id } = req.params;
 
       try {
@@ -465,7 +450,7 @@ app.get("/me", token, (req, res) => {
     });
 
     // Create new product with image upload
-    app.post("/products",token, upload.array("images", 5), async (req, res) => {
+    app.post("/products", upload.array("images", 10), async (req, res) => {
       try {
         if (!req.files || req.files.length === 0) {
           return res.status(400).json({ message: "No images uploaded" });
@@ -501,6 +486,10 @@ app.get("/me", token, (req, res) => {
           .json({ message: "Failed to add product", error: error.message });
       }
     });
+
+
+
+    
 
      // Search route
      app.get("/products", async (req, res) => {
