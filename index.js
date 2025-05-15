@@ -10,18 +10,12 @@ require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
 
-
 app.use(cors());
-
 
 // middleware
 app.use(
   cors({
-    origin: [
-      "http://localhost:5000",
-      "https://kretarferiwala-server.vercel.app",
-      "https://kretarferiwala-server-b14721cqp.vercel.app",
-    ],
+    origin: ["http://localhost:3000", "https://kretarferiwalaa.vercel.app"],
     credentials: true,
   })
 );
@@ -31,9 +25,6 @@ app.use(express.json());
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = process.env.MONGODB_URI;
 
-
-
-
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -41,7 +32,6 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
-
 
 // Cloudinary config
 cloudinary.config({
@@ -56,30 +46,27 @@ const storage = new CloudinaryStorage({
   params: {
     folder: "kretarferiwala/slider",
     allowed_formats: ["jpg", "jpeg", "png"],
-    
   },
 });
 const upload = multer({ storage });
 
-
 // JWT Authentication Middleware
 function token(req, res, next) {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
 
   if (!token) {
-    return res.status(401).json({ message: 'Access token required' });
+    return res.status(401).json({ message: "Access token required" });
   }
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ message: 'Invalid or expired token' });
+    if (err)
+      return res.status(403).json({ message: "Invalid or expired token" });
 
-    req.user = user; 
+    req.user = user;
     next();
   });
 }
-
-
 
 async function run() {
   try {
@@ -93,62 +80,58 @@ async function run() {
       .db("kretarferiwala")
       .collection("deliverycharges");
     const sliderImages = client.db("kretarferiwala").collection("sliderimages");
-    const usersCollection  = client.db("kretarferiwala").collection("admin");
+    const usersCollection = client.db("kretarferiwala").collection("admin");
 
+    // admin register
+    app.post("/register", async (req, res) => {
+      const { email, password } = req.body;
 
-// admin register
-app.post("/register", async (req, res) => {
-  const { email, password } = req.body;
+      const existingUser = await usersCollection.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({ message: "User already exists" });
+      }
 
-  const existingUser = await usersCollection.findOne({ email });
-  if (existingUser) {
-    return res.status(400).json({ message: "User already exists" });
-  }
+      const hashedPassword = await bcrypt.hash(password, 10);
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+      await usersCollection.insertOne({
+        email,
+        password: hashedPassword,
+      });
 
-  await usersCollection.insertOne({
-    email,
-    password: hashedPassword,
-  });
+      res.status(201).json({ message: "User registered successfully" });
+    });
 
-  res.status(201).json({ message: "User registered successfully" });
-});
+    // admin login
+    app.post("/login", async (req, res) => {
+      const { email, password } = req.body;
 
+      if (!email || !password) {
+        return res
+          .status(400)
+          .json({ message: "Email and password are required" });
+      }
 
-// admin login
-app.post("/login", async (req, res) => {
-  const { email, password } = req.body;
+      const user = await usersCollection.findOne({ email });
+      if (!user) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
 
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
 
-  if (!email || !password) {
-    return res.status(400).json({ message: "Email and password are required" });
-  }
+      const token = jwt.sign({ email: user.email }, process.env.JWT_SECRET, {
+        expiresIn: "7d",
+      });
 
-  const user = await usersCollection.findOne({ email });
-  if (!user) {
-    return res.status(401).json({ message: "Invalid email or password" });
-  }
+      res.json({ token });
+    });
 
-  const isPasswordValid = await bcrypt.compare(password, user.password);
-  if (!isPasswordValid) {
-    return res.status(401).json({ message: "Invalid email or password" });
-  }
-
-  const token = jwt.sign({ email: user.email }, process.env.JWT_SECRET, {
-    expiresIn: "7d",
-  });
-
-  res.json({ token });
-});
-
-
-// verify token
-app.get("/me", token, (req, res) => {
-  res.json({ email: req.user.email });
-});
-
-
+    // verify token
+    app.get("/me", token, (req, res) => {
+      res.json({ email: req.user.email });
+    });
 
     // Upload a new slider image
     app.post("/slider", upload.single("image"), async (req, res) => {
@@ -186,7 +169,6 @@ app.get("/me", token, (req, res) => {
         const public_id = sliderImage.imageUrl.split("/").pop().split(".")[0];
         await cloudinary.uploader.destroy(public_id);
 
-       
         await sliderImages.deleteOne({ _id: new ObjectId(id) });
 
         res.status(200).json({ message: "Image deleted successfully" });
@@ -199,7 +181,6 @@ app.get("/me", token, (req, res) => {
     //  all products fetch
     app.get("/products", async (req, res) => {
       try {
-       
         await client.connect();
 
         const allPosts = await allProducts.find().toArray();
@@ -223,7 +204,6 @@ app.get("/me", token, (req, res) => {
     //  all categories fetch
     app.get("/categories", async (req, res) => {
       try {
-       
         await client.connect();
 
         const allPosts = await allCategories.find().toArray();
@@ -238,7 +218,6 @@ app.get("/me", token, (req, res) => {
     //   slider get
     app.get("/sliders", async (req, res) => {
       try {
-   
         await client.connect();
 
         const allPosts = await slider.find().toArray();
@@ -268,7 +247,7 @@ app.get("/me", token, (req, res) => {
           status: "active",
           paymentMethod: "Cash on Delivery",
           orderNumber: generateOrderNumber(),
-          createdAt: new Date(), 
+          createdAt: new Date(),
         };
 
         const result = await allOrders.insertOne(orderWithDefaults);
@@ -276,7 +255,7 @@ app.get("/me", token, (req, res) => {
         res.status(201).json({
           message: "Order placed successfully",
           insertedId: result.insertedId,
-          orderNumber: orderWithDefaults.orderNumber, 
+          orderNumber: orderWithDefaults.orderNumber,
         });
       } catch (error) {
         console.error("Error placing order:", error);
@@ -289,16 +268,18 @@ app.get("/me", token, (req, res) => {
       try {
         const category = req.query.category;
         const excludeId = req.query.excludeId;
-    
+
         if (!category || !excludeId) {
-          return res.status(400).json({ error: "category and excludeId are required" });
+          return res
+            .status(400)
+            .json({ error: "category and excludeId are required" });
         }
-    
+
         const query = {
           category: category,
           _id: { $ne: new ObjectId(excludeId) },
         };
-    
+
         const relatedProducts = await allProducts.find(query).toArray();
         res.json(relatedProducts);
       } catch (error) {
@@ -306,7 +287,6 @@ app.get("/me", token, (req, res) => {
         res.status(500).json({ error: "Failed to fetch related products" });
       }
     });
-    
 
     // get all order
     app.get("/allOrders", async (req, res) => {
@@ -362,7 +342,7 @@ app.get("/me", token, (req, res) => {
     });
 
     // DELETE product by ID
-    app.delete("/product/:id",token, async (req, res) => {
+    app.delete("/product/:id", token, async (req, res) => {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -383,11 +363,11 @@ app.get("/me", token, (req, res) => {
     app.get("/updatedeliverycharge", async (req, res) => {
       try {
         const chargeData = await deliveryCharge.findOne({});
-    
+
         if (!chargeData) {
           return res.status(404).json({ error: "Delivery charge not found" });
         }
-    
+
         res.json({
           insideDhaka: chargeData.insideDhaka,
           outsideDhaka: chargeData.outsideDhaka,
@@ -459,7 +439,7 @@ app.get("/me", token, (req, res) => {
         const { name, category, description, regularPrice, discountPrice } =
           req.body;
 
-        const imageUrls = req.files.map((file) => file.path); 
+        const imageUrls = req.files.map((file) => file.path);
 
         const newProduct = {
           name,
@@ -487,35 +467,25 @@ app.get("/me", token, (req, res) => {
       }
     });
 
-
-
-    
-
-     // Search route
-     app.get("/products", async (req, res) => {
+    // Search route
+    app.get("/products", async (req, res) => {
       try {
         const query = req.query.query || "";
         if (!query.trim()) {
-          return res.json([]); 
+          return res.json([]);
         }
-    
+
         const regex = new RegExp(query, "i");
         const products = await allProducts
           .find({ name: { $regex: regex } })
           .toArray();
-    
+
         res.json(products);
       } catch (error) {
         console.error("Fetch error:", error);
         res.status(500).json({ error: "Failed to fetch products" });
       }
     });
-    
-
-    
-
-
-
 
     // Connect the client to the server	(optional starting in v4.7)
 
@@ -539,4 +509,3 @@ app.get("/", (req, res) => {
 app.listen(port, () => {
   console.log(`kretarferiwala is running on port ${port}`);
 });
-
