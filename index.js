@@ -1,10 +1,11 @@
 const express = require("express");
 const cors = require("cors");
+const bcrypt = require("bcryptjs");
 const mongodb = require("mongodb");
 const multer = require("multer");
 const { v2: cloudinary } = require("cloudinary");
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
-
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
@@ -306,9 +307,6 @@ async function run() {
       }
     });
     
-    
-
-
 
     // Create a new category
     app.post("/category", upload.single("image"), async (req, res) => {
