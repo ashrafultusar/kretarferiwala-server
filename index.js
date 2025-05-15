@@ -56,7 +56,7 @@ async function run() {
     const sliderImages = client.db("kretarferiwala").collection("sliderimages");
 
 
-    
+
 
     // Upload a new slider image
     app.post("/slider", upload.single("image"), async (req, res) => {
@@ -193,29 +193,28 @@ async function run() {
     });
 
     // related products fetch
-    app.get("/products", async (req, res) => {
+    app.get("/related-products", async (req, res) => {
       try {
         const category = req.query.category;
         const excludeId = req.query.excludeId;
-
-        let query = {};
-        if (category) {
-          query.category = category;
+    
+        if (!category || !excludeId) {
+          return res.status(400).json({ error: "category and excludeId are required" });
         }
-
-        const allProducts = await allProducts
-          .find({
-            ...query,
-            _id: { $ne: excludeId },
-          })
-          .toArray();
-
-        res.json(allProducts);
+    
+        const query = {
+          category: category,
+          _id: { $ne: new ObjectId(excludeId) },
+        };
+    
+        const relatedProducts = await allProducts.find(query).toArray();
+        res.json(relatedProducts);
       } catch (error) {
-        console.error("Error fetching products:", error);
-        res.status(500).json({ error: "Failed to fetch products" });
+        console.error("Error fetching related products:", error);
+        res.status(500).json({ error: "Failed to fetch related products" });
       }
     });
+    
 
     // get all order
     app.get("/allOrders", async (req, res) => {
