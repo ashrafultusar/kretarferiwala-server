@@ -288,46 +288,27 @@ async function run() {
     });
 
     // delivery charge
-    app.post("/deliverycharges", async (req, res) => {
+    app.get("/updatedeliverycharge", async (req, res) => {
       try {
-        const { insideDhaka, outsideDhaka } = req.body;
-       
-        if (
-          typeof insideDhaka !== "number" ||
-          typeof outsideDhaka !== "number"
-        ) {
-          return res.status(400).json({ message: "Invalid delivery charges" });
+        const chargeData = await deliveryCharge.findOne({});
+    
+        if (!chargeData) {
+          return res.status(404).json({ error: "Delivery charge not found" });
         }
-
-        const existing = await deliveryCharge.findOne({});
-
-        let result;
-        if (existing) {
-          result = await deliveryCharge.updateOne(
-            { _id: existing._id },
-            { $set: { insideDhaka, outsideDhaka } }
-          );
-          if (result.modifiedCount === 0) {
-            return res
-              .status(400)
-              .json({ message: "No changes made to delivery charges" });
-          }
-        } else {
-          // Insert new document
-          result = await deliveryCharge.insertOne({
-            insideDhaka,
-            outsideDhaka,
-          });
-        }
-
-        res
-          .status(200)
-          .json({ message: "Delivery charges updated successfully" });
+    
+        res.json({
+          insideDhaka: chargeData.insideDhaka,
+          outsideDhaka: chargeData.outsideDhaka,
+        });
       } catch (error) {
-        console.error("Error updating delivery charges:", error);
-        res.status(500).json({ message: "Server error" });
+        console.error("Error fetching delivery charge:", error);
+        res.status(500).json({ error: "Failed to fetch delivery charge" });
       }
     });
+    
+    
+
+
 
     // Create a new category
     app.post("/category", upload.single("image"), async (req, res) => {
