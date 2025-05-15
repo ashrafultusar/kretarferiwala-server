@@ -53,8 +53,10 @@ async function run() {
     const deliveryCharge = client
       .db("kretarferiwala")
       .collection("deliverycharges");
-
     const sliderImages = client.db("kretarferiwala").collection("sliderimages");
+
+
+    
 
     // Upload a new slider image
     app.post("/slider", upload.single("image"), async (req, res) => {
@@ -89,11 +91,10 @@ async function run() {
           return res.status(404).json({ error: "Image not found" });
         }
 
-        // Delete image from Cloudinary
         const public_id = sliderImage.imageUrl.split("/").pop().split(".")[0];
         await cloudinary.uploader.destroy(public_id);
 
-        // Delete image from MongoDB
+       
         await sliderImages.deleteOne({ _id: new ObjectId(id) });
 
         res.status(200).json({ message: "Image deleted successfully" });
@@ -106,13 +107,11 @@ async function run() {
     //  all products fetch
     app.get("/products", async (req, res) => {
       try {
-        // Connect to the database
+       
         await client.connect();
 
-        // Fetch all posts from the 'allProducts' collection
         const allPosts = await allProducts.find().toArray();
 
-        // Send the posts as a JSON response
         res.json(allPosts);
       } catch (error) {
         console.error("Error fetching all posts:", error);
@@ -132,13 +131,11 @@ async function run() {
     //  all categories fetch
     app.get("/categories", async (req, res) => {
       try {
-        // Connect to the database
+       
         await client.connect();
 
-        // Fetch all posts from the 'allProducts' collection
         const allPosts = await allCategories.find().toArray();
 
-        // Send the posts as a JSON response
         res.json(allPosts);
       } catch (error) {
         console.error("Error fetching all posts:", error);
@@ -149,13 +146,11 @@ async function run() {
     //   slider get
     app.get("/sliders", async (req, res) => {
       try {
-        // Connect to the database
+   
         await client.connect();
 
-        // Fetch all posts from the 'allProducts' collection
         const allPosts = await slider.find().toArray();
 
-        // Send the posts as a JSON response
         res.json(allPosts);
       } catch (error) {
         console.error("Error fetching all posts:", error);
@@ -172,20 +167,16 @@ async function run() {
         if (!orderData?.products || orderData.products.length === 0) {
           return res.status(400).json({ error: "No products in order" });
         }
-
-        // Generate dynamic order number (GB# followed by random 6 digits)
         const generateOrderNumber = () => {
           const randomNum = Math.floor(100000 + Math.random() * 900000);
           return `GB#${randomNum}`;
         };
-
-        // Create order with default values
         const orderWithDefaults = {
           ...orderData,
           status: "active",
           paymentMethod: "Cash on Delivery",
           orderNumber: generateOrderNumber(),
-          createdAt: new Date(), // Adding timestamp
+          createdAt: new Date(), 
         };
 
         const result = await allOrders.insertOne(orderWithDefaults);
@@ -193,7 +184,7 @@ async function run() {
         res.status(201).json({
           message: "Order placed successfully",
           insertedId: result.insertedId,
-          orderNumber: orderWithDefaults.orderNumber, // Send back the generated order number
+          orderNumber: orderWithDefaults.orderNumber, 
         });
       } catch (error) {
         console.error("Error placing order:", error);
@@ -229,13 +220,10 @@ async function run() {
     // get all order
     app.get("/allOrders", async (req, res) => {
       try {
-        // Connect to the database
         await client.connect();
 
-        // Fetch all posts from the 'allProducts' collection
         const allPosts = await allOrders.find().toArray();
 
-        // Send the posts as a JSON response
         res.json(allPosts);
       } catch (error) {
         console.error("Error fetching all posts:", error);
@@ -282,7 +270,6 @@ async function run() {
       res.send(result);
     });
 
-    // admin route products delete
     // DELETE product by ID
     app.delete("/product/:id", async (req, res) => {
       try {
@@ -305,8 +292,7 @@ async function run() {
     app.post("/deliverycharges", async (req, res) => {
       try {
         const { insideDhaka, outsideDhaka } = req.body;
-
-        // Validation
+       
         if (
           typeof insideDhaka !== "number" ||
           typeof outsideDhaka !== "number"
@@ -318,7 +304,6 @@ async function run() {
 
         let result;
         if (existing) {
-          // Update existing document
           result = await deliveryCharge.updateOne(
             { _id: existing._id },
             { $set: { insideDhaka, outsideDhaka } }
@@ -376,7 +361,7 @@ async function run() {
 
     // Delete a category by ID
     app.delete("/category/:id", async (req, res) => {
-      const { id } = req.params; // Change to req.params.id
+      const { id } = req.params;
 
       try {
         const category = await allCategories.findOne({ _id: new ObjectId(id) });
@@ -384,8 +369,6 @@ async function run() {
         if (!category) {
           return res.status(404).json({ error: "Category not found" });
         }
-
-        // Cloudinary delete image (assuming public_id is properly set)
         const public_id = category.image.split("/").pop().split(".")[0];
         await cloudinary.uploader.destroy(public_id);
 
@@ -408,7 +391,7 @@ async function run() {
         const { name, category, description, regularPrice, discountPrice } =
           req.body;
 
-        const imageUrls = req.files.map((file) => file.path); // Cloudinary URLs
+        const imageUrls = req.files.map((file) => file.path); 
 
         const newProduct = {
           name,
