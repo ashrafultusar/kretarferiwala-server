@@ -14,10 +14,24 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 
 
+// middleware
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5000",
+      "https://kretarferiwala-server.vercel.app",
+      "https://kretarferiwala-server-b14721cqp.vercel.app",
+    ],
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = process.env.MONGODB_URI;
+
+
 
 
 const client = new MongoClient(uri, {
@@ -27,6 +41,7 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
 
 // Cloudinary config
 cloudinary.config({
@@ -45,8 +60,30 @@ const storage = new CloudinaryStorage({
 });
 const upload = multer({ storage });
 
+
+// JWT Authentication Middleware
+function token(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ message: 'Access token required' });
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ message: 'Invalid or expired token' });
+
+    req.user = user; 
+    next();
+  });
+}
+
+
+
 async function run() {
   try {
+    // await client.connect();
+
     const allProducts = client.db("kretarferiwala").collection("products");
     const allCategories = client.db("kretarferiwala").collection("categories");
     const slider = client.db("kretarferiwala").collection("sliderimages");
@@ -55,12 +92,81 @@ async function run() {
       .db("kretarferiwala")
       .collection("deliverycharges");
     const sliderImages = client.db("kretarferiwala").collection("sliderimages");
+    const usersCollection  = client.db("kretarferiwala").collection("admin");
 
 
+// admin register
+app.post("/register",token, async (req, res) => {
+  const { email, password } = req.body;
+
+  const existingUser = await usersCollection.findOne({ email });
+  if (existingUser) {
+    return res.status(400).json({ message: "User already exists" });
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  await usersCollection.insertOne({
+    email,
+    password: hashedPassword,
+  });
+
+  res.status(201).json({ message: "User registered successfully" });
+});
+
+
+
+// admin login
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
+
+
+  if (!email || !password) {
+    return res.status(400).json({ message: "Email and password are required" });
+  }
+
+  const user = await usersCollection.findOne({ email });
+  if (!user) {
+    return res.status(401).json({ message: "Invalid email or password" });
+  }
+
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+  if (!isPasswordValid) {
+    return res.status(401).json({ message: "Invalid email or password" });
+  }
+
+  const token = jwt.sign({ email: user.email }, process.env.JWT_SECRET, {
+    expiresIn: "1h",
+  });
+
+  res.json({ token });
+});
+
+
+// verify token
+app.get("/me", token, (req, res) => {
+  res.json({ email: req.user.email });
+});
+
+
+
+
+
+// Protected route example
+//  app.get('/profile', authenticateToken, async (req, res) => {
+//   try {
+//     const user = await usersCollection.findOne({ email: req.user.email });
+//     if (!user) return res.status(404).json({ message: 'User not found' });
+
+//     res.json({ email: user.email });
+//   } catch (error) {
+//     res.status(500).json({ message: 'Server error' });
+//   }
+// });
 
 
     // Upload a new slider image
-    app.post("/slider", upload.single("image"), async (req, res) => {
+    app.post("/slider",token, upload.single("image"), async (req, res) => {
       try {
         const imageUrl = req.file.path;
         const result = await sliderImages.insertOne({
@@ -79,7 +185,7 @@ async function run() {
     });
 
     // Delete a slider image
-    app.delete("/sliderDelete", async (req, res) => {
+    app.delete("/sliderDelete",token, async (req, res) => {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: "Missing image ID" });
 
@@ -218,7 +324,7 @@ async function run() {
     
 
     // get all order
-    app.get("/allOrders", async (req, res) => {
+    app.get("/allOrders",token, async (req, res) => {
       try {
         await client.connect();
 
@@ -232,7 +338,7 @@ async function run() {
     });
 
     // Update order status
-    app.patch("/orders/:id", async (req, res) => {
+    app.patch("/orders/:id",token, async (req, res) => {
       try {
         const { id } = req.params;
         const { status } = req.body;
@@ -262,7 +368,7 @@ async function run() {
       }
     });
 
-    app.get("/orders/:id", async (req, res) => {
+    app.get("/orders/:id",token, async (req, res) => {
       const id = req.params.id;
       console.log(id);
       const query = { _id: new ObjectId(id) };
@@ -271,7 +377,7 @@ async function run() {
     });
 
     // DELETE product by ID
-    app.delete("/product/:id", async (req, res) => {
+    app.delete("/product/:id",token, async (req, res) => {
       try {
         const id = req.params.id;
         const query = { _id: new ObjectId(id) };
@@ -289,7 +395,7 @@ async function run() {
     });
 
     // delivery charge
-    app.get("/updatedeliverycharge", async (req, res) => {
+    app.get("/updatedeliverycharge",token, async (req, res) => {
       try {
         const chargeData = await deliveryCharge.findOne({});
     
@@ -306,10 +412,9 @@ async function run() {
         res.status(500).json({ error: "Failed to fetch delivery charge" });
       }
     });
-    
 
     // Create a new category
-    app.post("/category", upload.single("image"), async (req, res) => {
+    app.post("/category",token, upload.single("image"), async (req, res) => {
       const { name } = req.body;
       const image = req.file?.path;
 
@@ -338,7 +443,7 @@ async function run() {
     });
 
     // Delete a category by ID
-    app.delete("/category/:id", async (req, res) => {
+    app.delete("/category/:id",token, async (req, res) => {
       const { id } = req.params;
 
       try {
@@ -360,7 +465,7 @@ async function run() {
     });
 
     // Create new product with image upload
-    app.post("/products", upload.array("images", 5), async (req, res) => {
+    app.post("/products",token, upload.array("images", 5), async (req, res) => {
       try {
         if (!req.files || req.files.length === 0) {
           return res.status(400).json({ message: "No images uploaded" });
