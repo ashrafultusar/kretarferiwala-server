@@ -72,59 +72,39 @@ async function run() {
   try {
     // await client.connect();
 
-    const allProducts = client.db("kretarferiwala").collection("products");
-    const allCategories = client.db("kretarferiwala").collection("categories");
-    const slider = client.db("kretarferiwala").collection("sliderimages");
-    const allOrders = client.db("kretarferiwala").collection("orders");
+    const allProducts = client.db("kfDB").collection("products");
+    const allCategories = client.db("kfDB").collection("categories");
+    const slider = client.db("kfDB").collection("sliderimages");
+    const allOrders = client.db("kfDB").collection("orders");
     const deliveryCharge = client
-      .db("kretarferiwala")
+      .db("kfDB")
       .collection("deliverycharges");
-    const sliderImages = client.db("kretarferiwala").collection("sliderimages");
-    const adminCollection = client.db("kretarferiwala").collection("admin");
+    const sliderImages = client.db("kfDB").collection("sliderimages");
+    const adminCollection = client.db("kfDB").collection("admin");
 
     // admin register
-    // app.post("/register", async (req, res) => {
-    //   const { email, password } = req.body;
-
-    //   const existingUser = await adminCollection.findOne({ email });
-    //   if (existingUser) {
-    //     return res.status(400).json({ message: "User already exists" });
-    //   }
-
-    //   const hashedPassword = await bcrypt.hash(password, 10);
-
-    //   await adminCollection.insertOne({
-    //     email,
-    //     password: hashedPassword,
-    //   });
-
-    //   res.status(201).json({ message: "User registered successfully" });
-    // });
-
-
     app.post("/register", async (req, res) => {
       const { email, password } = req.body;
-    
+
       const existingUser = await adminCollection.findOne({ email });
       if (existingUser) {
         return res.status(400).json({ message: "User already exists" });
       }
-    
+
       const hashedPassword = await bcrypt.hash(password, 10);
-    
+
       // Check if this is the first user
       const userCount = await adminCollection.countDocuments();
       const role = userCount === 0 ? "superAdmin" : "admin";
-    
+
       await adminCollection.insertOne({
         email,
         password: hashedPassword,
         role, // Assign role here
       });
-    
+
       res.status(201).json({ message: "User registered successfully", role });
     });
-    
 
     // admin login
     app.post("/login", async (req, res) => {
@@ -152,11 +132,6 @@ async function run() {
 
       res.json({ token });
     });
-
-
-
-
-
 
     // verify token
     app.get("/me", token, (req, res) => {
@@ -408,6 +383,48 @@ async function run() {
       }
     });
 
+    app.patch("/updatedeliverycharge", token, async (req, res) => {
+      try {
+        const { insideDhaka, outsideDhaka } = req.body;
+    
+        if (
+          typeof insideDhaka !== "number" ||
+          typeof outsideDhaka !== "number" ||
+          insideDhaka < 0 ||
+          outsideDhaka < 0
+        ) {
+          return res.status(400).json({ error: "Invalid delivery charges" });
+        }
+
+        let chargeData = await deliveryCharge.findOne({});
+        if (!chargeData) {
+          chargeData = {
+            insideDhaka,
+            outsideDhaka,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+          await deliveryCharge.insertOne(chargeData);
+        } else {
+          await deliveryCharge.updateOne(
+            { _id: chargeData._id },
+            {
+              $set: {
+                insideDhaka,
+                outsideDhaka,
+                updatedAt: new Date(),
+              },
+            }
+          );
+        }
+    
+        res.status(200).json({ message: "Delivery charges updated successfully" });
+      } catch (error) {
+        console.error("Error updating delivery charge:", error);
+        res.status(500).json({ error: "Failed to update delivery charge" });
+      }
+    });
+    
     // Create a new category
     app.post("/category", upload.single("image"), async (req, res) => {
       const { name } = req.body;
@@ -553,29 +570,26 @@ async function run() {
       }
     });
 
+    // PATCH /admin/:id/role
+    app.patch("/admin/:id/role", async (req, res) => {
+      const { id } = req.params;
+      const { role } = req.body;
 
+      if (!["admin", "superAdmin"].includes(role)) {
+        return res.status(400).json({ message: "Invalid role" });
+      }
 
-// PATCH /admin/:id/role
-app.patch("/admin/:id/role", async (req, res) => {
-  const { id } = req.params;
-  const { role } = req.body;
-
-  if (!["admin", "superAdmin"].includes(role)) {
-    return res.status(400).json({ message: "Invalid role" });
-  }
-
-  try {
-    await adminCollection.updateOne(
-      { _id: new ObjectId(id) },
-      { $set: { role } }
-    );
-    res.status(200).json({ message: "Role updated successfully" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Failed to update role" });
-  }
-});
-
+      try {
+        await adminCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { role } }
+        );
+        res.status(200).json({ message: "Role updated successfully" });
+      } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: "Failed to update role" });
+      }
+    });
 
     // Connect the client to the server	(optional starting in v4.7)
 
