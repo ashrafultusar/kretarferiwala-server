@@ -80,26 +80,51 @@ async function run() {
       .db("kretarferiwala")
       .collection("deliverycharges");
     const sliderImages = client.db("kretarferiwala").collection("sliderimages");
-    const usersCollection = client.db("kretarferiwala").collection("admin");
+    const adminCollection = client.db("kretarferiwala").collection("admin");
 
     // admin register
+    // app.post("/register", async (req, res) => {
+    //   const { email, password } = req.body;
+
+    //   const existingUser = await adminCollection.findOne({ email });
+    //   if (existingUser) {
+    //     return res.status(400).json({ message: "User already exists" });
+    //   }
+
+    //   const hashedPassword = await bcrypt.hash(password, 10);
+
+    //   await adminCollection.insertOne({
+    //     email,
+    //     password: hashedPassword,
+    //   });
+
+    //   res.status(201).json({ message: "User registered successfully" });
+    // });
+
+
     app.post("/register", async (req, res) => {
       const { email, password } = req.body;
-
-      const existingUser = await usersCollection.findOne({ email });
+    
+      const existingUser = await adminCollection.findOne({ email });
       if (existingUser) {
         return res.status(400).json({ message: "User already exists" });
       }
-
+    
       const hashedPassword = await bcrypt.hash(password, 10);
-
-      await usersCollection.insertOne({
+    
+      // Check if this is the first user
+      const userCount = await adminCollection.countDocuments();
+      const role = userCount === 0 ? "superAdmin" : "admin";
+    
+      await adminCollection.insertOne({
         email,
         password: hashedPassword,
+        role, // Assign role here
       });
-
-      res.status(201).json({ message: "User registered successfully" });
+    
+      res.status(201).json({ message: "User registered successfully", role });
     });
+    
 
     // admin login
     app.post("/login", async (req, res) => {
@@ -111,7 +136,7 @@ async function run() {
           .json({ message: "Email and password are required" });
       }
 
-      const user = await usersCollection.findOne({ email });
+      const user = await adminCollection.findOne({ email });
       if (!user) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
@@ -127,6 +152,11 @@ async function run() {
 
       res.json({ token });
     });
+
+
+
+
+
 
     // verify token
     app.get("/me", token, (req, res) => {
@@ -486,6 +516,66 @@ async function run() {
         res.status(500).json({ error: "Failed to fetch products" });
       }
     });
+
+    //  all categories fetch
+    app.get("/allAdmin", async (req, res) => {
+      try {
+        await client.connect();
+
+        const allPosts = await adminCollection.find().toArray();
+
+        res.json(allPosts);
+      } catch (error) {
+        console.error("Error fetching all posts:", error);
+        res.status(500).json({ error: "Failed to fetch posts" });
+      }
+    });
+
+    // admin delete
+    app.delete("/admin/:id", async (req, res) => {
+      const { id } = req.params;
+
+      try {
+        // Convert id string to ObjectId to query MongoDB
+        const { ObjectId } = require("mongodb");
+        const objectId = new ObjectId(id);
+
+        const result = await adminCollection.deleteOne({ _id: objectId });
+
+        if (result.deletedCount === 1) {
+          res.status(200).json({ message: "Category deleted successfully" });
+        } else {
+          res.status(404).json({ error: "Category not found" });
+        }
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Failed to delete category" });
+      }
+    });
+
+
+
+// PATCH /admin/:id/role
+app.patch("/admin/:id/role", async (req, res) => {
+  const { id } = req.params;
+  const { role } = req.body;
+
+  if (!["admin", "superAdmin"].includes(role)) {
+    return res.status(400).json({ message: "Invalid role" });
+  }
+
+  try {
+    await adminCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { role } }
+    );
+    res.status(200).json({ message: "Role updated successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to update role" });
+  }
+});
+
 
     // Connect the client to the server	(optional starting in v4.7)
 
